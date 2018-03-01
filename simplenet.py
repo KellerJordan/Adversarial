@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class MirrorNet(nn.Module):
+class SimpleNet(nn.Module):
     
     def __init__(self):
-        super(MirrorNet, self).__init__()
+        super(SimpleNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, 5, 2)
         self.conv2 = nn.Conv2d(64, 64, 3)
         self.conv3 = nn.Conv2d(64, 128, 3)
