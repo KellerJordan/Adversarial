@@ -1,5 +1,6 @@
+import os
+import shutil
 import numpy as np
-
 import matplotlib.pyplot as plt
 
 import torch
@@ -17,9 +18,11 @@ CIFAR_CLASSES = ('plane', 'car', 'bird', 'cat', 'deer',
                  'dog', 'frog', 'horse', 'ship', 'truck')
 gpu_dtype = torch.cuda.FloatTensor
 
-def imshow(img, label):
+def imshow(img, label=None):
     img = img / 2 + 0.5     # unnormalize
-    plt.title(CIFAR_CLASSES[label])
+    img = np.clip(img, 0, 1)
+    if label:
+        plt.title(CIFAR_CLASSES[label])
     plt.imshow(np.transpose(img.squeeze(), (1, 2, 0)))
     plt.show()
 
@@ -91,7 +94,9 @@ class Trainer:
         self.loader_val = loader_val
         
         self.criterion = nn.CrossEntropyLoss().cuda()
-        self.learning_rate = 0.1
+        
+        self.optimizer = optim.SGD(self.model.parameters(), lr=0.1,
+                                   momentum=0.9, weight_decay=1e-3)
     
     def check_accuracy(self, loader):
         self.model.eval()
@@ -109,7 +114,7 @@ class Trainer:
         acc = float(num_correct) / num_samples
         print('Got %d / %d correct (%.2f)' % (num_correct, num_samples, 100 * acc))
 
-    def train_epoch(self, learning_rate):
+    def train_epoch(self):
         self.model.train()
         for t, (X, y) in enumerate(self.loader_train):
             X_var = Variable(X.type(gpu_dtype))
@@ -124,12 +129,28 @@ class Trainer:
         print('loss = %.4f' % loss.data[0])
 
     def train_schedule(self, schedule):
+        lr = self.optimizer.param_groups[0]['lr']
         for num_epochs in schedule:
-            print('Training for %d epochs with learning rate %f' % (num_epochs, self.learning_rate))
-            self.optimizer = optim.SGD(self.model.parameters(), lr=self.learning_rate,
-                                       momentum=0.9, weight_decay=1e-3)
+            print('Training for %d epochs with learning rate %f' % (num_epochs, lr))
             for epoch in range(num_epochs):
                 print('Starting epoch %d / %d' % (epoch+1, num_epochs))
-                self.train_epoch(self.learning_rate)
+                # update learning rate
+                for param_group in self.optimizer.param_groups:
+                    param_group['lr'] = lr
+                self.train_epoch()
                 self.check_accuracy(self.loader_val)
-        self.learning_rate *= .1
+            lr *= 0.1
+
+    def save_checkpoint(self, filename='checkpoint.pth.tar'):
+        state = {
+            'model': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict()}
+        torch.save(state, filename)
+
+    def load_checkpoint(self, filename='checkpoint.pth.tar'):
+        if os.path.isfile(filename):
+            state = torch.load(filename)
+            self.model.load_state_dict(state['model'])
+            self.optimizer.load_state_dict(state['optimizer'])
+        else:
+            print('%s not found.' % filename)
